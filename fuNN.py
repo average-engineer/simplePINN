@@ -16,13 +16,13 @@ from tensorflow.python.ops import math_ops # Tensorflow math operations
 
 #%%
 L = 100
-nData = 150
+nData = 32
 
 # Constructing Training Data
 # Collocation Points are assumed to be linearly distributed over the bar
 xTrain = np.linspace(0,L,nData)
 print(xTrain)
-xTrain = xTrain.reshape(150,1,1)
+xTrain = xTrain.reshape(nData,1,1)
 
 #%% Neural Network (u(x))
 # Exact Solution for the displacement of the bar
@@ -52,7 +52,7 @@ class lambdaLayer(Layer):
             initial_value=w_init(shape=(input_shape[-1], self.units),dtype='float32'),trainable=True)
         b_init = tf.zeros_initializer() # Lambda will be the bias
         self.b = tf.Variable(name="lambda",
-            initial_value=b_init(shape=(self.units,), dtype='float32'),trainable=True) # shape is equal to the number of neurons in the layer
+            initial_value=b_init(shape=(1,), dtype='float32'),trainable=True) # shape is equal to the number of neurons in the layer
         super().build(input_shape)
 
 
@@ -74,11 +74,12 @@ model_uf = Sequential()
 model_uf.add(keras.Input(shape=(1,1))) # 150 datapoints of 1x1 data
 # Hidden Layers
 # Custom Layer for adding lambda as a trainable parameter
-cusLayer = lambdaLayer(1,activation = 'tanh', name = 'LambdaLayer')
-model_uf.add(cusLayer) 
+cusLayer = lambdaLayer(150,activation = 'tanh', name = 'LambdaLayer')
 model_uf.add(layers.Dense(300,activation = 'tanh', name = 'Layer1'))
 model_uf.add(layers.Dense(300,activation = 'tanh', name = 'Layer2'))
 model_uf.add(layers.Dense(300,activation = 'tanh', name = 'Layer3'))
+model_uf.add(cusLayer)
+ 
 # model_uf.add(layers.Dense(300,activation = 'tanh', name = 'Layer4'))
 # model_uf.add(layers.Dense(300,activation = 'tanh', name = 'Layer5'))
 # model_uf.add(layers.Dense(300,activation = 'tanh', name = 'Layer6'))
@@ -117,7 +118,7 @@ def lossFunc(x,n,L,lbda):
 # Compiling the model
 model_uf.compile(loss = lossFunc(xTrain,nData,L,np.array(cusLayer.b)[0]), optimizer = 'adam')
 model_uf.summary()
-model_uf.fit(xTrain,uTrain,epochs = epochs)
+model_uf.fit(xTrain,epochs = epochs)
 
 # Predicted Values
 uPred = model_uf.predict(xTrain) # Predicted u(x)
@@ -127,58 +128,11 @@ lambdaPred = np.array(cusLayer.b) # Predicted lambda (Model Parameter)
 model_uf.save('saved_model/NN_uf')
 
 #%% Predicted Values
-uPred = opPred[:,:,0]
-fPred = opPred[:,:,1]
-
 fig = plt.figure(figsize = (6,6))
-plt.plot(uPred[:,0],color = 'blue', label = 'Predicted')
-plt.plot(u_exact,color = 'red', label = 'Exact')
+plt.plot(uPred[:,0,0],color = 'blue', label = 'Predicted')
+plt.plot(u_exact[:,0,0],color = 'red', label = 'Exact')
 plt.legend()
 plt.grid()
 
 
-fig = plt.figure(figsize = (6,6))
-plt.plot(fPred[:,0],color = 'blue', label = 'Predicted')
-plt.plot(f_exact,color = 'red', label = 'Exact')
-plt.legend()
-plt.grid()
-
-#%% Function for differentiation of the predicted u outputs
-def diff(x):
-    # epsilon (increment in x)
-    eps = 1e-1
-    uPred1 = model_uf.predict(x + eps)
-    uPred1 = uPred1[:,:,0]
-    uPred = model_uf.predict(x)
-    uPred = uPred[:,:,0]
-    return (uPred1 - uPred)/(eps)
-
-# Function for double differentiation of the predicted u outputs
-def diff2(x):
-    eps = 1e-1
-    return (diff(x + eps) - diff(x))/(eps)
-
-# Function for triple differentiation of the predicted u outputs
-def diff3(x):
-    eps = 1e-1
-    return (diff2(x + eps) - diff2(x))/(eps)
-
-# Function for single differentiation of the predicted f outputs
-def diff_f(x):
-    eps = 1e-1
-    fPred1 = model_uf.predict(x + eps)
-    fPred1 = fPred1[:,:,1]
-    fPred = model_uf.predict(x)
-    fPred = fPred[:,:,1]
-    return (fPred1 - fPred)/(eps)
-
-#%% Computing Lambda (unknown model parameters) from the given PDE form
-lbda = L*(diff_f(xTrain) - diff3(xTrain))
-lbdaVal = np.mean(lbda[10:])
-
-fig = plt.figure(figsize = (6,6))
-plt.plot(lbda)
-plt.grid()
-
-
-    
+# %%
