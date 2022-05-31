@@ -22,6 +22,7 @@ nData = 150
 # Collocation Points are assumed to be linearly distributed over the bar
 xTrain = np.linspace(0,L,nData)
 print(xTrain)
+xTrain = xTrain.reshape(150,1,1)
 
 #%% Neural Network (u(x))
 # Exact Solution for the displacement of the bar
@@ -37,7 +38,7 @@ xTrain = tf.convert_to_tensor(xTrain,dtype = tf.float32)
 class lambdaLayer(Layer):
 
     # add an activation parameter
-    def __init__(self, units=32, activation=None, name = None): # Default value of neurons = 32, can be changed
+    def __init__(self, units, activation=None, name = None): # Default value of neurons = 32, can be changed
         super(lambdaLayer, self).__init__()
         self.units = units
         
@@ -58,6 +59,10 @@ class lambdaLayer(Layer):
     def call(self, inputs): # Computes the output of the layer based on the trainable parameters and the activation function
         
         # pass the computation to the activation layer
+        # print('Input Shape is->')
+        # print(type(inputs))
+        # print('Weight Shape is->')
+        # print(type(self.w))
         return self.activation(tf.matmul(inputs, self.w) + self.b)
 
 #%% Implementing a simple Feed Forward Neural Network
@@ -103,7 +108,7 @@ def lossFunc(x,n,L,lbda):
         # Approximated PDE Residual
         fPred = diff2_u + (lbda*x)/(L)
         # Squared difference of the PDE Residual
-        diff2 = math_ops.squared_difference(fPred)
+        diff2 = tf.math.square(fPred)
         return (diff1 + diff2)/(n)
     
     #loss = K.mean(diff,axis = 0) # Mean over first dimension of the tensor (50 datapoints)
