@@ -50,9 +50,13 @@ class lambdaLayer(Layer):
         w_init = tf.random_normal_initializer()
         self.w = tf.Variable(name="kernel",
             initial_value=w_init(shape=(input_shape[-1], self.units),dtype='float32'),trainable=True)
-        b_init = tf.zeros_initializer() # Lambda will be the bias
-        self.b = tf.Variable(name="lambda",
-            initial_value=b_init(shape=(1,), dtype='float32'),trainable=True) # shape is equal to the number of neurons in the layer
+        b_init = tf.zeros_initializer() 
+        self.b = tf.Variable(name="bias",
+            initial_value=b_init(shape=(self.units,), dtype='float32'),trainable=True) # shape is equal to the number of neurons in the layer
+        #super().build(input_shape)
+        lbda_init = tf.zeros_initializer() # Lambda will be the additional trainable parameter
+        self.lbda = tf.Variable(name="Lambda",
+            initial_value=b_init(shape=(1,), dtype='float32'),trainable=True) 
         super().build(input_shape)
 
 
@@ -63,7 +67,7 @@ class lambdaLayer(Layer):
         # print(type(inputs))
         # print('Weight Shape is->')
         # print(type(self.w))
-        return self.activation(tf.matmul(inputs, self.w) + self.b)
+        return self.activation(tf.matmul(inputs, self.w) + self.b - self.lbda)
 
 #%% Implementing a simple Feed Forward Neural Network
 epochs = 100
@@ -71,10 +75,10 @@ seed(100)
 tf.random.set_seed(1000)
 model_uf = Sequential()
 # Input Layer
-model_uf.add(keras.Input(shape=(1,1))) # 150 datapoints of 1x1 data
+model_uf.add(keras.Input(shape=(1,1))) # nData datapoints of 1x1 data
 # Hidden Layers
 # Custom Layer for adding lambda as a trainable parameter
-cusLayer = lambdaLayer(150,activation = 'tanh', name = 'LambdaLayer')
+cusLayer = lambdaLayer(300,activation = 'tanh', name = 'LambdaLayer')
 model_uf.add(layers.Dense(300,activation = 'tanh', name = 'Layer1'))
 model_uf.add(layers.Dense(300,activation = 'tanh', name = 'Layer2'))
 model_uf.add(layers.Dense(300,activation = 'tanh', name = 'Layer3'))
@@ -98,10 +102,10 @@ def lossFunc(x,n,L,lbda):
     # n: Number of datapoints
     # lbda: Model Parameter
     # Variation in x
-    eps = 1e-1
+    eps = 1e-2
     # Loss function taking in only the predicted and exact values
     def loss(uExact,uPred):
-        diff1 = math_ops.squared_difference(uPred, uExact) # Squared Difference of the training data
+        diff1 = math_ops.squared_difference(uExact, uPred) # Squared Difference of the training data
         # Differentiating Model output
         # Finite Difference formulas
         diff_u = (model_uf(x + eps) - model_uf(x - eps))/(2*eps)
@@ -109,20 +113,22 @@ def lossFunc(x,n,L,lbda):
         # Approximated PDE Residual
         fPred = diff2_u + (lbda*x)/(L)
         # Squared difference of the PDE Residual
-        diff2 = tf.math.square(fPred)
+        #diff2 = tf.math.square(fPred)
+        diff2 = fPred**2
         return (diff1 + diff2)/(n)
     
     #loss = K.mean(diff,axis = 0) # Mean over first dimension of the tensor (50 datapoints)
     return loss
 
 # Compiling the model
-model_uf.compile(loss = lossFunc(xTrain,nData,L,np.array(cusLayer.b)[0]), optimizer = 'adam')
+model_uf.compile(loss = lossFunc(xTrain,nData,L,np.array(cusLayer.lbda)[0]), optimizer = 'adam')
 model_uf.summary()
-model_uf.fit(xTrain,epochs = epochs)
+history = model_uf.fit(xTrain,uTrain,epochs = epochs)
 
 # Predicted Values
 uPred = model_uf.predict(xTrain) # Predicted u(x)
-lambdaPred = np.array(cusLayer.b) # Predicted lambda (Model Parameter)
+lambdaPred = np.array(cusLayer.lbda) # Predicted lambda (Model Parameter)
+print(lambdaPred)
 
 # Saving the trained model 
 model_uf.save('saved_model/NN_uf')
@@ -131,6 +137,13 @@ model_uf.save('saved_model/NN_uf')
 fig = plt.figure(figsize = (6,6))
 plt.plot(uPred[:,0,0],color = 'blue', label = 'Predicted')
 plt.plot(u_exact[:,0,0],color = 'red', label = 'Exact')
+plt.legend()
+plt.grid()
+plt.show()
+
+fig = plt.figure(figsize = (6,6))
+plt.plot(history.history['loss'], label = 'Training Loss')
+plt.xlabel('# Epochs')
 plt.legend()
 plt.grid()
 
